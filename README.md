@@ -1,40 +1,41 @@
 # The PvP chess bot for the Telegram
 
-[![Build Status](https://travis-ci.com/Piterden/chessbot.svg?branch=master)](https://travis-ci.com/Piterden/chessbot)
+![Travis (.org)](https://img.shields.io/travis/Piterden/chessbot/dev.svg?style=for-the-badge)
+![GitHub search hit counter](https://img.shields.io/github/search/Piterden/chessbot/chess.svg?style=for-the-badge)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/Piterden/chessbot.svg?style=for-the-badge)
 
 ## Overview
 
-A simple PvP chess game based on editing a reply markup of a chess board. The board built with callback buttons of an inline-keyboard. Bot uses the [`node-chess`](https://github.com/brozeph/node-chess) package, which is driven by the algebraic notation of moves.
+A simple PvP chess game based on inline message and edit a reply markup of a chess board. The board built with callback buttons of inline-keyboard. Bot uses the [`node-chess`](https://github.com/brozeph/node-chess) package, which is driven by the algebraic notation of moves (PGN).
 
 #### Features:
 
-- The chess board based on inline keyboard buttons and editing of reply markup.
+- Inline query to start the game.
 - PvP - play with friends.
+- Bot works in any group or private chat.
 - All moves stored in the DB, so you can play a few games simultaneously.
+
+**[Demo]**(https://t.me/chessy_bot) (WIP version)
 
 ## Usage
 
-[Demo](https://t.me/chessy_bot) (WIP version).
+To play chess simply type `@chessy_bot[SPACE]` to your telegram message input box.
 
-### Commands
+![](img/3.png)
 
-- `/start` - shows a list of available for join games and the `Create new game` button. *It is the default state.*
+Then choose a side you want to play with. You will see an inline message with a chess board and a **"Join to game"** at the bottom.
 
-![](img/1.png)
+![](img/4.png)
 
-Each list item contains id's of players and completed moves count. The first id is always for a white player. If it is your id, then there will be **`YOU`** word, instead of id. Your turn marker will be shown if the game needs your attention (your turn now).
+When someone join your game, this will be displayed in the status message. Also the **"Join to game"** button will become **"Settings"**.
 
-Select the game you need now:
+![](img/5.png)
 
-![](img/2.png)
+Now everything is ready to start the game. To move your pieces just select a piece you want to move and then select a destination from displayed available to move squares.
 
-All buttons are clickable and boards will be updated right after you or your opponent had made a turn. The star near a player's id means it is a turn of a side where it placed now.
-
-#### Buttons:
-
-- **Back** - return to the list of games
-- **Reverse** - *NOT IMPLEMENTED YET*
-- **Index** - *NOT IMPLEMENTED YET*
+> **WARNING!!!**
+>
+> The board is rotating each turn by default! The active player always placed at the bottom!
 
 ## Install and run own bot instance
 
@@ -46,7 +47,7 @@ cd chessbot
 npm i
 ```
 
-Then you need to create and fill up a new `.env` file:
+Then you have to create and fill up a new `.env` file:
 
 ```bash
 cp .env.example .env
@@ -56,7 +57,7 @@ editor .env
 Next migrate the DB:
 
 ```bash
-node_modules/.bin/knex migrate:latest
+npm run knex migrate:latest
 ```
 
 Then run the dev mode:
@@ -78,7 +79,14 @@ Please read [CONTRIBUTING.md](https://gist.github.com/PurpleBooth/b24679402957c6
 ## Authors
 
 - **Denis Efremov** - *Code|Idea* - [Piterden](https://github.com/Piterden)
+- **kolay** - *Code|Consulting* - [kolay-v](<https://github.com/kolay-v>)
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+
+## Donate
+
+- **BTC**  `3F275vPSCvYW19MHZqSjw79fEwwU4MbTgV`
+- **LTC**  `MGMCQB3QAcrSBjU3eGJviqB2J2f5BNVRGr`
+- **DOGE** `D5m69FRDGEn3G3xuakvqTxUpGVt6NegKJp`

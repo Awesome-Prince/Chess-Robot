@@ -1,153 +1,229 @@
 const chess = require('chess')
 
-const { board } = require('@/keyboards')
-const { debug, escapeUser, unescapeUser } = require('@/helpers')
+const {
+  log,
+  debug,
+  getFen,
+  preLog,
+  getGame,
+  isWhiteTurn,
+  isWhiteUser,
+  isBlackUser,
+  makeUserLog,
+} = require('@/helpers')
+const { board, actions, promotion } = require('@/keyboards')
 
-const isWhiteTurn = (moves) => !(moves.length % 2)
-const isWhiteUser = (game, ctx) => Number(game.user_w) === ctx.from.id
-const isBlackUser = (game, ctx) => Number(game.user_b) === ctx.from.id
+const statusMessage = ({ isCheck, isCheckmate, isRepetition }) => (
+  `${isCheck ? '|CHECK|' : ''}${isCheckmate ? '|CHECKMATE|' : ''}${isRepetition ? '|REPETITION|' : ''}`
+)
 
-const statusMessage = ({ isCheck, isCheckmate, isRepetition }) => `
-${isCheck ? '|CHECK|' : ''}
-${isCheckmate ? '|CHECKMATE|' : ''}
-${isRepetition ? '|REPETITION|' : ''}`
-
-const topMessage = (moves, player, enemy) => isWhiteTurn(moves)
+const topMessage = (whiteTurn, player, enemy) => whiteTurn
   ? `White (top): ${player.first_name}
-Black (bottom): ${enemy.first_name}
-Black's turn`
+Black (bottom): [${enemy.first_name}](tg://user?id=${enemy.id})
+Black's turn | [Discussion](https://t.me/chessy_bot_chat)`
   : `Black (top): ${player.first_name}
-White (bottom): ${enemy.first_name}
-White's turn`
-
-const isReady = (game) => !!(game.user_w && game.user_b)
+White (bottom): [${enemy.first_name}](tg://user?id=${enemy.id})
+White's turn | [Discussion](https://t.me/chessy_bot_chat)`
 
 module.exports = () => [
-  /^([a-h])([1-8])$/,
+  /^([a-h])([1-8])([QRNB])?$/,
   async (ctx) => {
-    const gameState = await ctx.db('games')
-      .where('id', ctx.session.gameId)
-      .first()
+    const gameEntry = await getGame(ctx)
 
-    debug(gameState)
-
-    if (!isReady(gameState)) {
-      return ctx.answerCbQuery('Join the game to move pieces!')
+    if (typeof gameEntry === 'boolean') {
+      return gameEntry
     }
 
-    if (![Number(gameState.user_w), Number(gameState.user_b)]
-      .includes(ctx.from.id)) {
-      return ctx.answerCbQuery('This board is full, please start a new one.')
+    if (!isBlackUser(gameEntry, ctx) && !isWhiteUser(gameEntry, ctx)) {
+      return ctx.answerCbQuery('Sorry, this game is busy. Try to make a new one.')
     }
 
-    const movesState = await ctx.db('moves')
-      .where('game_id', gameState.id)
+    ctx.game.entry = gameEntry
+    ctx.game.config = JSON.parse(gameEntry.config) || { rotation: 'dynamic' }
+
+    const gameMoves = await ctx.db('moves')
+      .where('game_id', gameEntry.id)
       .orderBy('created_at', 'asc')
       .select()
 
-    if ((isWhiteTurn(movesState) && isBlackUser(gameState, ctx)) ||
-      (!isWhiteTurn(movesState) && isWhiteUser(gameState, ctx))) {
+    if ((isWhiteTurn(gameMoves) && isBlackUser(gameEntry, ctx)) ||
+      (!isWhiteTurn(gameMoves) && isWhiteUser(gameEntry, ctx))) {
       return ctx.answerCbQuery('Wait, please. Now is not your turn.')
     }
 
     const gameClient = chess.create({ PGN: true })
 
-    movesState.forEach(({ move }) => {
+    gameMoves.forEach(({ entry }) => {
       try {
-        gameClient.move(move)
+        gameClient.move(entry)
       } catch (error) {
         debug(error)
       }
     })
 
-    let moves = []
+    const enemy = await ctx.db('users')
+      .where('id', isWhiteUser(gameEntry, ctx)
+        ? Number(gameEntry.blacks_id)
+        : Number(gameEntry.whites_id))
+      .first()
+      .catch(debug)
+
     let status = gameClient.getStatus()
-    const square = status.board.squares
+    const pressed = status.board.squares
       .find(({ file, rank }) => file === ctx.match[1] && rank === Number(ctx.match[2]))
 
-    if (!ctx.session.moves) {
+    if (
+      !ctx.game.selected &&
+      (!pressed ||
+      !pressed.piece ||
+      (pressed.piece.side.name === 'black' && isWhiteTurn(gameMoves)) ||
+      (pressed.piece.side.name === 'white' && !isWhiteTurn(gameMoves)))
+    ) {
+      return ctx.answerCbQuery()
+    }
+    /**
+     * Selection of a piece
+     */
+    if (
+      pressed && pressed.piece &&
+      ((pressed.piece.side.name === 'white' && isWhiteTurn(gameMoves)) ||
+      (pressed.piece.side.name === 'black' && !isWhiteTurn(gameMoves))) &&
+      !(ctx.game.selected &&
+        pressed.file === ctx.game.selected.file &&
+        pressed.rank === ctx.game.selected.rank)
+    ) {
+      const allowedMoves = Object.keys(status.notatedMoves)
+        .filter((key) => status.notatedMoves[key].src === pressed)
+        .map((key) => ({ ...status.notatedMoves[key], key }))
+
+      if (allowedMoves.length === 0) {
+        ctx.game.allowedMoves = allowedMoves
+        ctx.game.selected = pressed
+
+        return ctx.answerCbQuery(`${pressed.piece.type} ${pressed.file}${pressed.rank}`)
+      }
+
+      ctx.game.lastBoard = board({
+        board: status.board.squares.map((square) => {
+          const move = allowedMoves
+            .find((({ file, rank }) => ({ dest }) => dest.file === file &&
+              dest.rank === rank)(square))
+
+          return move ? { ...square, move } : square
+        }),
+        isWhite: ctx.game.config.rotation === 'dynamic'
+          ? isWhiteTurn(gameMoves)
+          : ctx.game.config.rotation === 'whites',
+        actions: actions(),
+      })
+
+      await ctx.editMessageReplyMarkup(ctx.game.lastBoard.reply_markup)
+        .catch(debug)
+
+      ctx.game.allowedMoves = allowedMoves
+      ctx.game.selected = pressed
+
+      return ctx.answerCbQuery(`${pressed.piece.type} ${pressed.file}${pressed.rank}`)
+    }
+
+    /**
+     * Selection of a destination to move
+     */
+    if (ctx.game.selected) {
       if (
-        !square ||
-        !square.piece ||
-        (square.piece.side.name === 'black' && isWhiteTurn(movesState)) ||
-        (square.piece.side.name === 'white' && !isWhiteTurn(movesState))
+        ctx.game.selected.piece.type === 'pawn' &&
+        (
+          (isWhiteTurn(gameMoves) && ctx.game.selected.rank === 7 && pressed.rank === 8) ||
+          (!isWhiteTurn(gameMoves) && ctx.game.selected.rank === 2 && pressed.rank === 1)
+        ) &&
+        !ctx.game.promotion
       ) {
+        ctx.game.promotion = pressed
+
+        const makeMoves = ctx.game.allowedMoves.filter(
+          ({dest: {file, rank}}) => file === pressed.file && rank === pressed.rank,
+        )
+        const keyboardRow = promotion({makeMoves, pressed})
+        const board = ctx.game.lastBoard.reply_markup
+
+        board.inline_keyboard.unshift(keyboardRow)
+
+        await ctx.editMessageReplyMarkup(board)
+          .catch(debug)
+
         return ctx.answerCbQuery()
       }
 
-      moves = Object.keys(status.notatedMoves)
-        .filter((key) => status.notatedMoves[key].src === square)
-        .map((key) => ({ ...status.notatedMoves[key], key }))
+      let makeMove
+      // let topMessageText = topMessage(
+      //   !isWhiteTurn(gameMoves),
+      //   enemy,
+      //   ctx.from,
+      // )
 
-      await ctx.editMessageReplyMarkup(board(
-        status.board.squares.map((sqr) => {
-          const move = moves
-            .find((({ file, rank }) => ({ dest }) => dest.file === file &&
-              dest.rank === rank)(sqr))
+      if (ctx.game.promotion) {
+        makeMove = ctx.game.allowedMoves.find(({key, dest: {file, rank}}) => (
+          file === pressed.file && rank === pressed.rank && key.endsWith(ctx.match[3])
+        ))
+        ctx.game.promotion = null
+      } else {
+        makeMove = ctx.game.allowedMoves.find(
+          ({dest: {file, rank}}) => file === pressed.file && rank === pressed.rank,
+        )
+      }
 
-          return move ? { ...sqr, destination: move } : sqr
-        }),
-        isWhiteTurn(movesState)
-      ).reply_markup)
-        .catch(debug)
-
-      ctx.session.moves = moves
-      ctx.session.selected = square
-    } else {
-      const moving = ctx.session.moves
-        .find(({ dest: { file, rank } }) => file === square.file && rank === square.rank)
-
-      if (moving && !movesState.find(({ move }) => move === moving.key)) {
+      if (makeMove) {
         try {
-          gameClient.move(moving.key)
+          gameClient.move(makeMove.key)
         } catch (error) {
           debug(error)
         }
 
-        status = gameClient.getStatus()
-
         await ctx.db('moves').insert({
-          game_id: ctx.session.gameId,
-          move: moving.key,
-        })
-          .catch(debug)
-      }
+          game_id: ctx.game.entry.id,
+          entry: makeMove.key,
+        }).catch(debug)
 
-      ctx.session.moves = null
-      ctx.session.selected = null
-
-      let enemy = await ctx.db('users')
-        .where('id', isWhiteTurn(movesState)
-          ? Number(gameState.user_w)
-          : Number(gameState.user_b))
-        .first()
-        .catch(debug)
-
-      if (enemy) {
-        enemy = unescapeUser(enemy)
-      } else {
-        enemy = ctx.tg.getChatMember(
-          ctx.callbackQuery.chat_instance,
-          isWhiteTurn(movesState)
-            ? Number(gameState.user_w)
-            : Number(gameState.user_b)
+        log(
+          preLog('MOVE', `${gameEntry.id} ${makeMove.key} ${gameMoves.length + 1} ${makeUserLog(ctx.from)}`),
+          ctx,
         )
-        await ctx.db('users').insert(escapeUser(enemy)).catch(debug)
       }
 
-      debug(enemy)
+      status = gameClient.getStatus()
 
-      await ctx.editMessageText(
-        topMessage(
-          movesState,
-          ctx.update.callback_query.from,
-          enemy
-        ) + statusMessage(status),
-        board(status.board.squares, !isWhiteTurn(movesState))
-      )
+      ctx.game.allowedMoves = null
+      ctx.game.selected = null
+
+      ctx.game.lastBoard = board({
+        board: status.board.squares,
+        isWhite: ctx.game.config.rotation === 'dynamic'
+          ? (makeMove ? !isWhiteTurn(gameMoves) : isWhiteTurn(gameMoves))
+          : ctx.game.config.rotation === 'whites',
+        actions: actions(),
+      })
+
+      if (makeMove) {
+        await ctx.editMessageMedia(
+          {
+            type: 'photo',
+            media: `${process.env.BOARD_VISUALIZER_URL}?fen=${getFen(gameClient.game.board)}&rotate=${makeMove ? isWhiteTurn(gameMoves) : !isWhiteTurn(gameMoves)}`,
+            caption: topMessage(isWhiteTurn(gameMoves), ctx.from, enemy) + statusMessage(status),
+          },
+          {
+            ...ctx.game.lastBoard,
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+          },
+        ).catch(debug)
+
+        return ctx.answerCbQuery(makeMove.key)
+      }
+
+      await ctx.editMessageReplyMarkup(ctx.game.lastBoard.reply_markup)
         .catch(debug)
-    }
 
-    return ctx.answerCbQuery()
+      return ctx.answerCbQuery()
+    }
   },
 ]

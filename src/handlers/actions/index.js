@@ -7,7 +7,6 @@ module.exports = () => [
         break
 
       default:
-        break
     }
     return ctx.answerCbQuery()
   },

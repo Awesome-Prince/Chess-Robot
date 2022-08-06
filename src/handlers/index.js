@@ -1,27 +1,29 @@
 const newHandler = require('./new')
-const joinHandler = require('./join')
+const joinHandler = require('./games')
 const loadHandler = require('./load')
-const leaveHandler = require('./leave')
-const movesHandler = require('./moves')
+const gamesHandler = require('./games')
 const startHandler = require('./start')
-const actionsHandler = require('./actions')
-const messageHandler = require('./message')
-const optionsHandler = require('./options')
+const mainMenuHandler = require('./mainMenu')
+const inlineBackHandler = require('./inlineBack')
 const inlineJoinHandler = require('./inlineJoin')
 const inlineMoveHandler = require('./inlineMove')
+const inlineLastTurn = require('./inlineLastTurn')
 const inlineQueryHandler = require('./inlineQuery')
+const inlineRejoinHandler = require('./inlineRejoin')
+const inlineSettingsHandler = require('./inlineSettings')
 
 module.exports = {
   newHandler,
   joinHandler,
   loadHandler,
-  leaveHandler,
-  movesHandler,
+  gamesHandler,
   startHandler,
-  actionsHandler,
-  messageHandler,
-  optionsHandler,
+  inlineLastTurn,
+  mainMenuHandler,
+  inlineBackHandler,
   inlineJoinHandler,
   inlineMoveHandler,
   inlineQueryHandler,
+  inlineRejoinHandler,
+  inlineSettingsHandler,
 }

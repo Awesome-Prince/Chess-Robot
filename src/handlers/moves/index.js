@@ -3,7 +3,6 @@ const chess = require('chess')
 const { debug } = require('@/helpers')
 const { board, actions } = require('@/keyboards')
 
-// eslint-disable-next-line no-magic-numbers
 const isWhiteTurn = (moves) => !(moves.length % 2)
 
 const statusMessage = ({ isCheck, isCheckmate, isRepetition }) => `
@@ -12,8 +11,8 @@ ${isCheckmate ? '|CHECKMATE|' : ''}
 ${isRepetition ? '|REPETITION|' : ''}`
 
 const topMessage = (moves, game, isWhiteSide) => isWhiteSide
-  ? `${isWhiteTurn(moves) ? '*' : ''} (BLACK) User ${game.user_b || 'waiting...'}`
-  : `${!isWhiteTurn(moves) ? '*' : ''} (WHITE) ${game.user_w}`
+  ? `${isWhiteTurn(moves) ? '*' : ''} (BLACK) User ${game.blacks_id || 'waiting...'}`
+  : `${!isWhiteTurn(moves) ? '*' : ''} (WHITE) ${game.whites_id}`
 
 const bottomMessage = (moves, game, isWhiteSide) => isWhiteSide
   ? `${!isWhiteTurn(moves) ? '*' : ''} (WHITE) YOU`
@@ -22,17 +21,15 @@ const bottomMessage = (moves, game, isWhiteSide) => isWhiteSide
 const isReady = (game) => !!(
   game.board_w && game.board_b &&
   game.actions_w && game.actions_b &&
-  game.user_w && game.user_b
+  game.whites_id && game.blacks_id
 )
 
 module.exports = () => [
   /^([a-h])([1-8])$/,
   async (ctx) => {
-    const games = await ctx.db('games')
+    const gameState = await ctx.db('games')
       .where('id', ctx.session.gameId)
-      .select()
-
-    const gameState = games[0]
+      .first()
 
     if (!isReady(gameState)) {
       return ctx.answerCbQuery('Wait for second player...')
@@ -44,8 +41,8 @@ module.exports = () => [
       .select()
 
     if (
-      (isWhiteTurn(movesState) && ctx.from.id === Number(gameState.user_b)) ||
-      (!isWhiteTurn(movesState) && ctx.from.id === Number(gameState.user_w))
+      (isWhiteTurn(movesState) && ctx.from.id === Number(gameState.blacks_id)) ||
+      (!isWhiteTurn(movesState) && ctx.from.id === Number(gameState.whites_id))
     ) {
       return ctx.answerCbQuery('Not your turn! Please wait...')
     }
@@ -131,7 +128,7 @@ module.exports = () => [
         if (ctx.session.board) {
           try {
             await ctx.tg.editMessageText(
-              gameState.user_w,
+              gameState.whites_id,
               gameState.board_w,
               undefined,
               topMessage(movesState, gameState, true) + statusMessage(status),
@@ -143,7 +140,7 @@ module.exports = () => [
 
           try {
             await ctx.tg.editMessageText(
-              gameState.user_b,
+              gameState.blacks_id,
               gameState.board_b,
               undefined,
               topMessage(movesState, gameState, false) + statusMessage(status),
@@ -157,7 +154,7 @@ module.exports = () => [
         if (ctx.session.actions) {
           try {
             await ctx.tg.editMessageText(
-              gameState.user_w,
+              gameState.whites_id,
               gameState.actions_w,
               undefined,
               bottomMessage(movesState, gameState, true),
@@ -169,7 +166,7 @@ module.exports = () => [
 
           try {
             await ctx.tg.editMessageText(
-              gameState.user_b,
+              gameState.blacks_id,
               gameState.actions_b,
               undefined,
               bottomMessage(movesState, gameState, false),

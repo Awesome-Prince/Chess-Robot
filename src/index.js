@@ -3,45 +3,61 @@ require('module-alias/register')
 
 const Sequelize = require('sequelize')
 const knex = require('knex')
-const Telegraf = require('telegraf')
-const Stage = require('telegraf/stage')
 
-const { gameScene } = require('@/scenes')
-const knexConfig = require('@/../knexfile')
-const {
-  // newHandler,
-  // joinHandler,
-  // loadHandler,
-  inlineJoinHandler,
-  inlineMoveHandler,
-  inlineQueryHandler,
-} = require('@/handlers')
 
 const { session } = Telegraf
 const {
-  BOT_NAME, BOT_TOKEN, DB_STRING,
-} = process.env
 
-const stage = new Stage([gameScene])
+  inlineBackHandler,
+  inlineJoinHandler,
+  inlineMoveHandler,
+  inlineQueryHandler,
+  inlineRejoinHandler,
+  inlineSettingsHandler,
+} = require('@/handlers')
+
+
+const { BOT_NAME, BOT_TOKEN } = process.env
 
 const bot = new Telegraf(BOT_TOKEN, { username: BOT_NAME })
+const stage = new Stage([gameScene])
 
 bot.context.sequelize = new Sequelize(DB_STRING)
 bot.context.sequelize.sync()
 bot.context.db = knex(knexConfig)
 
-bot.use(session({
-  getSessionKey: (ctx) => (ctx.update.callback_query && ctx.update.callback_query.inline_message_id) ||
-    (ctx.from && ctx.chat && `${ctx.from.id}:${ctx.chat.id}`),
-}))
 bot.use(stage.middleware())
 
-// bot.start(...loadHandler())
-// bot.action(...newHandler())
-// bot.action(...joinHandler())
+bot.use(session({
+  property: 'game',
+  getSessionKey: (ctx) => (ctx.callbackQuery && ctx.callbackQuery.inline_message_id) ||
+    (ctx.from && ctx.chat && `${ctx.from.id}:${ctx.chat.id}`),
+}))
 
+// bot.use(async (ctx, next) => {
+//   debug(ctx.update)
+//   // debug(ctx.game)
+//   next(ctx)
+//   // if (ctx.chat && ctx.chat.type === 'private') {
+//   // }
+// })
+
+// bot.command('start', startHandler())
+
+
+bot.action(...inlineBackHandler())
 bot.action(...inlineJoinHandler())
 bot.action(...inlineMoveHandler())
-bot.on('inline_query', inlineQueryHandler())
+bot.action(...inlineRejoinHandler())
+bot.action(...inlineSettingsHandler())
 
-bot.startPolling()
+bot.on('chosen_inline_result', async (ctx) => {
+  log(
+    preLog('BORD', `${makeUserLog(ctx.update.chosen_inline_result.from)}| [${ctx.update.chosen_inline_result.result_id === 2 ? 'black' : 'white'}] {${ctx.update.chosen_inline_result.inline_message_id}}`),
+    ctx
+  )
+})
+
+bot.catch((err) => debug(err))
+
+bot.telegram.getUpdates(1, -1).then(() => bot.launch())
