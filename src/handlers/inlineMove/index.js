@@ -3,19 +3,22 @@ const chess = require('chess')
 const {
   log,
   debug,
-  getFen,
   preLog,
   getGame,
   isWhiteTurn,
   isWhiteUser,
   isBlackUser,
   makeUserLog,
+  makeBoardImageUrl,
 } = require('@/helpers')
 const { board, actions, promotion } = require('@/keyboards')
 
-const statusMessage = ({ isCheck, isCheckmate, isRepetition }) => (
-  `${isCheck ? '|CHECK|' : ''}${isCheckmate ? '|CHECKMATE|' : ''}${isRepetition ? '|REPETITION|' : ''}`
-)
+// eslint-disable-next-line id-length
+const sortFunction = (a, b) => JSON.stringify(a) > JSON.stringify(b) ? 1 : -1
+const mapFunction = ({ dest }) => dest
+
+const statusMessage = ({ isCheck, isCheckmate, isRepetition }) => `
+${isCheck ? '|CHECK|' : ''}${isCheckmate ? '|CHECKMATE|' : ''}${isRepetition ? '|REPETITION|' : ''}`
 
 const topMessage = (whiteTurn, player, enemy) => whiteTurn
   ? `White (top): ${player.first_name}
@@ -28,6 +31,12 @@ White's turn | [Discussion](https://t.me/chessy_bot_chat)`
 module.exports = () => [
   /^([a-h])([1-8])([QRNB])?$/,
   async (ctx) => {
+    if (ctx.game.busy) {
+      return ctx.answerCbQuery()
+    }
+
+    ctx.game.busy = true
+
     const gameEntry = await getGame(ctx)
 
     if (typeof gameEntry === 'boolean') {
@@ -35,6 +44,7 @@ module.exports = () => [
     }
 
     if (!isBlackUser(gameEntry, ctx) && !isWhiteUser(gameEntry, ctx)) {
+      ctx.game.busy = false
       return ctx.answerCbQuery('Sorry, this game is busy. Try to make a new one.')
     }
 
@@ -48,6 +58,7 @@ module.exports = () => [
 
     if ((isWhiteTurn(gameMoves) && isBlackUser(gameEntry, ctx)) ||
       (!isWhiteTurn(gameMoves) && isWhiteUser(gameEntry, ctx))) {
+      ctx.game.busy = false
       return ctx.answerCbQuery('Wait, please. Now is not your turn.')
     }
 
@@ -79,6 +90,7 @@ module.exports = () => [
       (pressed.piece.side.name === 'black' && isWhiteTurn(gameMoves)) ||
       (pressed.piece.side.name === 'white' && !isWhiteTurn(gameMoves)))
     ) {
+      ctx.game.busy = false
       return ctx.answerCbQuery()
     }
     /**
@@ -96,12 +108,6 @@ module.exports = () => [
         .filter((key) => status.notatedMoves[key].src === pressed)
         .map((key) => ({ ...status.notatedMoves[key], key }))
 
-      if (allowedMoves.length === 0) {
-        ctx.game.allowedMoves = allowedMoves
-        ctx.game.selected = pressed
-
-        return ctx.answerCbQuery(`${pressed.piece.type} ${pressed.file}${pressed.rank}`)
-      }
 
       ctx.game.lastBoard = board({
         board: status.board.squares.map((square) => {
@@ -111,18 +117,32 @@ module.exports = () => [
 
           return move ? { ...square, move } : square
         }),
-        isWhite: ctx.game.config.rotation === 'dynamic'
-          ? isWhiteTurn(gameMoves)
-          : ctx.game.config.rotation === 'whites',
+        isWhite: isWhiteTurn(gameMoves),
         actions: actions(),
       })
 
-      await ctx.editMessageReplyMarkup(ctx.game.lastBoard.reply_markup)
-        .catch(debug)
+      await ctx.editMessageMedia(
+        {
+          type: 'photo',
+          media: makeBoardImageUrl(gameClient.getFen(), { rotate: Number(!isWhiteTurn(gameMoves)), marks }),
+          caption: topMessage(!isWhiteTurn(gameMoves), enemy, ctx.from) + statusMessage(status),
+        },
+        {
+          ...ctx.game.lastBoard,
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true,
+        },
+      )
+        .catch((error) => {
+          debug(error)
+          // debug(ctx.update)
+          // debug(ctx.game)
+        })
 
       ctx.game.allowedMoves = allowedMoves
       ctx.game.selected = pressed
 
+      ctx.game.busy = false
       return ctx.answerCbQuery(`${pressed.piece.type} ${pressed.file}${pressed.rank}`)
     }
 
@@ -141,9 +161,9 @@ module.exports = () => [
         ctx.game.promotion = pressed
 
         const makeMoves = ctx.game.allowedMoves.filter(
-          ({dest: {file, rank}}) => file === pressed.file && rank === pressed.rank,
+          ({ dest: { file, rank } }) => file === pressed.file && rank === pressed.rank,
         )
-        const keyboardRow = promotion({makeMoves, pressed})
+        const keyboardRow = promotion({ makeMoves, pressed })
         const board = ctx.game.lastBoard.reply_markup
 
         board.inline_keyboard.unshift(keyboardRow)
@@ -151,24 +171,20 @@ module.exports = () => [
         await ctx.editMessageReplyMarkup(board)
           .catch(debug)
 
-        return ctx.answerCbQuery()
+        ctx.game.busy = false
+        return ctx.answerCbQuery('Please choose the piece to promote the pawn!')
       }
 
       let makeMove
-      // let topMessageText = topMessage(
-      //   !isWhiteTurn(gameMoves),
-      //   enemy,
-      //   ctx.from,
-      // )
 
       if (ctx.game.promotion) {
-        makeMove = ctx.game.allowedMoves.find(({key, dest: {file, rank}}) => (
+        makeMove = ctx.game.allowedMoves.find(({ key, dest: { file, rank } }) => (
           file === pressed.file && rank === pressed.rank && key.endsWith(ctx.match[3])
         ))
         ctx.game.promotion = null
       } else {
         makeMove = ctx.game.allowedMoves.find(
-          ({dest: {file, rank}}) => file === pressed.file && rank === pressed.rank,
+          ({ dest: { file, rank } }) => file === pressed.file && rank === pressed.rank,
         )
       }
 
@@ -192,26 +208,32 @@ module.exports = () => [
 
       status = gameClient.getStatus()
 
-      ctx.game.allowedMoves = null
-      ctx.game.selected = null
-
-      ctx.game.lastBoard = board({
-        board: status.board.squares,
-        isWhite: ctx.game.config.rotation === 'dynamic'
-          ? (makeMove ? !isWhiteTurn(gameMoves) : isWhiteTurn(gameMoves))
-          : ctx.game.config.rotation === 'whites',
-        actions: actions(),
-      })
-
       if (makeMove) {
         await ctx.editMessageMedia(
           {
             type: 'photo',
-            media: `${process.env.BOARD_VISUALIZER_URL}?fen=${getFen(gameClient.game.board)}&rotate=${makeMove ? isWhiteTurn(gameMoves) : !isWhiteTurn(gameMoves)}`,
+            media: makeBoardImageUrl(gameClient.getFen(), { rotate: Number(isWhiteTurn(gameMoves)) }),
             caption: topMessage(isWhiteTurn(gameMoves), ctx.from, enemy) + statusMessage(status),
           },
           {
-            ...ctx.game.lastBoard,
+            ...board({
+              board: status.board.squares,
+              isWhite: !isWhiteTurn(gameMoves),
+              actions: actions(),
+            }),
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+          },
+        ).catch(debug)
+
+
+          },
+          {
+            ...board({
+              board: status.board.squares,
+              isWhite: isWhiteTurn(gameMoves),
+              actions: actions(),
+            }),
             parse_mode: 'Markdown',
             disable_web_page_preview: true,
           },
@@ -220,8 +242,6 @@ module.exports = () => [
         return ctx.answerCbQuery(makeMove.key)
       }
 
-      await ctx.editMessageReplyMarkup(ctx.game.lastBoard.reply_markup)
-        .catch(debug)
 
       return ctx.answerCbQuery()
     }

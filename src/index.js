@@ -12,7 +12,6 @@ const {
   inlineJoinHandler,
   inlineMoveHandler,
   inlineQueryHandler,
-  inlineRejoinHandler,
   inlineSettingsHandler,
 } = require('@/handlers')
 
@@ -34,27 +33,18 @@ bot.use(session({
     (ctx.from && ctx.chat && `${ctx.from.id}:${ctx.chat.id}`),
 }))
 
-// bot.use(async (ctx, next) => {
-//   debug(ctx.update)
-//   // debug(ctx.game)
-//   next(ctx)
-//   // if (ctx.chat && ctx.chat.type === 'private') {
-//   // }
-// })
-
 // bot.command('start', startHandler())
 
 
 bot.action(...inlineBackHandler())
 bot.action(...inlineJoinHandler())
 bot.action(...inlineMoveHandler())
-bot.action(...inlineRejoinHandler())
 bot.action(...inlineSettingsHandler())
 
 bot.on('chosen_inline_result', async (ctx) => {
   log(
     preLog('BORD', `${makeUserLog(ctx.update.chosen_inline_result.from)}| [${ctx.update.chosen_inline_result.result_id === 2 ? 'black' : 'white'}] {${ctx.update.chosen_inline_result.inline_message_id}}`),
-    ctx
+    ctx,
   )
 })
 
