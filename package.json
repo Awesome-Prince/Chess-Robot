@@ -18,11 +18,7 @@
   "dependencies": {
     "chess": "^0.4.9",
     "dotenv": "^7.0.0",
-    "express": "^4.17.1",
-    "knex": "^0.20.13",
-    "module-alias": "^2.2.2",
-    "mysql2": "^2.2.5",
-    "telegraf": "^3.37.0"
+
   },
   "devDependencies": {
     "@babel/core": "^7.11.0",

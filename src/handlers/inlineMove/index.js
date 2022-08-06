@@ -108,19 +108,6 @@ module.exports = () => [
         .filter((key) => status.notatedMoves[key].src === pressed)
         .map((key) => ({ ...status.notatedMoves[key], key }))
 
-      if (
-        ((!ctx.game.allowedMoves || ctx.game.allowedMoves.length === 0) && allowedMoves.length === 0) ||
-        (ctx.game.allowedMoves && ctx.game.allowedMoves.length === allowedMoves.length &&
-          JSON.stringify(ctx.game.allowedMoves.map(mapFunction).sort(sortFunction)) === JSON.stringify(allowedMoves.map(mapFunction).sort(sortFunction)))
-      ) {
-        ctx.game.allowedMoves = allowedMoves
-        ctx.game.selected = pressed
-
-        ctx.game.busy = false
-        return ctx.answerCbQuery(`${pressed.piece.type} ${pressed.file}${pressed.rank}`)
-      }
-
-      const marks = allowedMoves.map(({ dest: { file, rank } }) => `${file}${rank}`).join(',')
 
       ctx.game.lastBoard = board({
         board: status.board.squares.map((square) => {
@@ -239,19 +226,7 @@ module.exports = () => [
           },
         ).catch(debug)
 
-        ctx.game.allowedMoves = null
-        ctx.game.selected = null
 
-        ctx.game.busy = false
-        return ctx.answerCbQuery(makeMove.key)
-      }
-
-      if (ctx.game.allowedMoves.length > 0) {
-        await ctx.editMessageMedia(
-          {
-            type: 'photo',
-            media: makeBoardImageUrl(gameClient.getFen(), { rotate: Number(!isWhiteTurn(gameMoves)) }),
-            caption: topMessage(!isWhiteTurn(gameMoves), enemy, ctx.from) + statusMessage(status),
           },
           {
             ...board({
@@ -263,12 +238,11 @@ module.exports = () => [
             disable_web_page_preview: true,
           },
         ).catch(debug)
+
+        return ctx.answerCbQuery(makeMove.key)
       }
 
-      ctx.game.allowedMoves = null
-      ctx.game.selected = null
 
-      ctx.game.busy = false
       return ctx.answerCbQuery()
     }
   },
