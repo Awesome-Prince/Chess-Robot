@@ -1,9 +1,9 @@
 const { inspect } = require('util')
 
-const { LOG_INFO_CHANNEL } = process.env
+const { LOG_INFO_CHANNEL, BOARD_IMAGE_BASE_URL } = process.env
 
 const emodji = {
-  white: {
+  black: {
     rook: '♜',
     knight: '♞',
     bishop: '♝',
@@ -11,7 +11,7 @@ const emodji = {
     king: '♚',
     pawn: '♟',
   },
-  black: {
+  white: {
     rook: '♖',
     knight: '♘',
     bishop: '♗',
@@ -67,7 +67,7 @@ const log = (data, ctx) => {
   ctx.telegram.sendMessage(
     `@${LOG_INFO_CHANNEL}`,
     `\`\`\`\n${data}\n\`\`\``,
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'Markdown' },
   ).catch(debug)
   console.log(data)
 }
@@ -102,11 +102,14 @@ const mainMenu = [
   [{ text: 'Play with Friend', switch_inline_query: '' }],
 ]
 
-const getGame = async (ctx) => {
+const makeBoardImageUrl = (fen, options = {}) => `
+${BOARD_IMAGE_BASE_URL}
+${fen.replace(/\//g, '%2F')}.jpg?
+${Object.entries(options).map((pair) => pair.join('=')).join('&')}
+`.split('\n').join('')
+
+const getGame = async (ctx, id) => {
   // if (ctx.match && ctx.match[3]) {
-  //   await ctx.db('games')
-  //     .where('id', Number(ctx.match[3]))
-  //     .update({ inline_id: ctx.callbackQuery.inline_message_id })
   //   await ctx.db('games')
   //     .where('id', Number(ctx.match[3]))
   //     .update({ inline_id: ctx.callbackQuery.inline_message_id })
@@ -118,23 +121,17 @@ const getGame = async (ctx) => {
 
   //   return game
   // }
-  if (ctx.match && ctx.match[3]) {
-    await ctx.db('games')
-      .where('id', Number(ctx.match[3]))
-      .update({ inline_id: ctx.callbackQuery.inline_message_id })
-
-    const game = await ctx.db('games')
-      .where('id', Number(ctx.match[3]))
-      .first()
-
-    return game
+  if (!ctx.game.entry) {
+    ctx.game.entry = id
+      ? ctx.db('games')
+        .where('id', id)
+        .first()
+      : ctx.db('games')
+        .where('inline_id', ctx.callbackQuery.inline_message_id)
+        .first()
   }
 
-  const game = ctx.game.entry || await ctx.db('games')
-    .where('inline_id', ctx.callbackQuery.inline_message_id)
-    .first()
-
-  return game
+  return ctx.game.entry
 }
 
 const validateGame = (game, ctx) => {
@@ -161,6 +158,19 @@ const preLog = (type = 'UNKN', data = {}, delimiter = ' ', date = new Date().toI
   `[${type}] ${date}:${delimiter}${data}`
 )
 
+const getOrCreateUser = async (ctx) => {
+  let user = await ctx.db('users')
+    .where({ id: ctx.from.id })
+    .first()
+    .catch(debug)
+
+  if (!user) {
+    await ctx.db('users').insert(ctx.from).catch(debug)
+    user = await ctx.db('users').where('id', ctx.from.id).first().catch(debug)
+  }
+  return user
+}
+
 const makeUserLog = ({
   id,
   username,
@@ -179,35 +189,6 @@ Black's turn`
 White (bottom): [${enemy.first_name}](tg://user?id=${enemy.id})
 White's turn`
 
-const getFen = (board) => {
-  const fen = []
-
-  for (let idx = 0; idx < board.squares.length; idx++) {
-    const square = board.squares[idx]
-
-    if (square.file === 'a' && idx > 0) {
-      fen.push('/')
-    }
-
-    if (square.piece) {
-      fen.push(square.piece.side.name === 'white'
-        ? (square.piece.notation || 'p').toUpperCase()
-        : (square.piece.notation || 'p').toLowerCase())
-    } else {
-      if (isNaN(Number(fen[fen.length - 1]))) {
-        fen.push(1)
-      } else {
-        if (square.file === 'a') {
-          fen.push(1)
-        } else {
-          fen[fen.length - 1] += 1
-        }
-      }
-    }
-  }
-
-  return fen.reverse().join('')
-}
 
 module.exports = {
   log,
@@ -229,6 +210,5 @@ module.exports = {
   makeUserLog,
   promotionMap,
   validateGame,
-  statusMessage,
-  getFen,
+
 }
