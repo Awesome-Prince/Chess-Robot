@@ -1,6 +1,6 @@
 const { inspect } = require('util')
 
-const { LOG_INFO_CHANNEL } = process.env
+const { LOG_INFO_CHANNEL, BOARD_IMAGE_BASE_URL } = process.env
 
 const emodji = {
   black: {
@@ -102,6 +102,12 @@ const mainMenu = [
   [{ text: 'Play with Friend', switch_inline_query: '' }],
 ]
 
+const makeBoardImageUrl = (fen, options = {}) => `
+${BOARD_IMAGE_BASE_URL}
+${fen.replace(/\//g, '%2F')}.jpg?
+${Object.entries(options).map((pair) => pair.join('=')).join('&')}
+`.split('\n').join('')
+
 const getGame = async (ctx, id) => {
   // if (ctx.match && ctx.match[3]) {
   //   await ctx.db('games')
@@ -115,18 +121,17 @@ const getGame = async (ctx, id) => {
 
   //   return game
   // }
-  let game
-
-  if (id) {
-    game = await ctx.db('games').where('id', id).first()
-    return game
+  if (!ctx.game.entry) {
+    ctx.game.entry = id
+      ? ctx.db('games')
+        .where('id', id)
+        .first()
+      : ctx.db('games')
+        .where('inline_id', ctx.callbackQuery.inline_message_id)
+        .first()
   }
 
-  game = ctx.game.entry || await ctx.db('games')
-    .where('inline_id', ctx.callbackQuery.inline_message_id)
-    .first()
-
-  return game
+  return ctx.game.entry
 }
 
 const validateGame = (game, ctx) => {
@@ -174,6 +179,16 @@ const makeUserLog = ({
   language_code: languageCode,
 }) => `|${id}-@${username || ''}-${firstName || ''}-${lastName || ''}-(${languageCode || ''})|`
 
+const statusMessage = ({ isCheck, isCheckmate, isRepetition }) => `${isCheck ? '|CHECK|' : ''}${isCheckmate ? '|CHECKMATE|' : ''}${isRepetition ? '|REPETITION|' : ''}`
+
+const topMessage = (whiteTurn, player, enemy) => whiteTurn
+  ? `White (top): [${player.first_name}](tg://user?id=${player.id})
+Black (bottom): [${enemy.first_name}](tg://user?id=${enemy.id})
+Black's turn`
+  : `Black (top): [${player.first_name}](tg://user?id=${player.id})
+White (bottom): [${enemy.first_name}](tg://user?id=${enemy.id})
+White's turn`
+
 module.exports = {
   log,
   debug,
@@ -186,6 +201,7 @@ module.exports = {
   isPlayer,
   mainMenu,
   getGamePgn,
+  topMessage,
   isBlackTurn,
   isWhiteTurn,
   isBlackUser,
@@ -193,5 +209,5 @@ module.exports = {
   makeUserLog,
   promotionMap,
   validateGame,
-  getOrCreateUser,
+
 }
