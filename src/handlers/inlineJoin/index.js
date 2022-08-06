@@ -57,8 +57,8 @@ module.exports = () => [
     )
 
     await ctx.editMessageCaption(
-      `Black  (top): [${blacks.first_name}](tg://user?id=${blacks.id})
-White  (bottom): [${whites.first_name}](tg://user?id=${whites.id})
+
+
 White's turn | [Discussion](https://t.me/chessy_bot_chat)`,
       {
         ...board({

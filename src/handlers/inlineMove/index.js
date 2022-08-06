@@ -126,23 +126,15 @@ module.exports = () => [
         actions: actions(),
       })
 
-      await ctx.editMessageMedia(
-        {
-          type: 'photo',
-          media: makeBoardImageUrl(gameClient.getFen(), { rotate: Number(!isWhiteTurn(gameMoves)), marks }),
-          caption: topMessage(!isWhiteTurn(gameMoves), enemy, ctx.from) + statusMessage(status),
+
+
         },
         {
           ...ctx.game.lastBoard,
           parse_mode: 'Markdown',
           disable_web_page_preview: true,
         },
-      )
-        .catch((error) => {
-          debug(error)
-          // debug(ctx.update)
-          // debug(ctx.game)
-        })
+
 
       ctx.game.allowedMoves = allowedMoves
       ctx.game.selected = pressed
@@ -213,39 +205,6 @@ module.exports = () => [
 
       status = gameClient.getStatus()
 
-      if (makeMove) {
-        await ctx.editMessageMedia(
-          {
-            type: 'photo',
-            media: makeBoardImageUrl(gameClient.getFen(), { rotate: Number(isWhiteTurn(gameMoves)) }),
-            caption: topMessage(isWhiteTurn(gameMoves), ctx.from, enemy) + statusMessage(status),
-          },
-          {
-            ...board({
-              board: status.board.squares,
-              isWhite: !isWhiteTurn(gameMoves),
-              actions: actions(),
-            }),
-            parse_mode: 'Markdown',
-            disable_web_page_preview: true,
-          },
-        ).catch(debug)
-
-
-          },
-          {
-            ...board({
-              board: status.board.squares,
-              isWhite: isWhiteTurn(gameMoves),
-              actions: actions(),
-            }),
-            parse_mode: 'Markdown',
-            disable_web_page_preview: true,
-          },
-        ).catch(debug)
-
-        return ctx.answerCbQuery(makeMove.key)
-      }
 
 
       return ctx.answerCbQuery()
