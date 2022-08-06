@@ -1,11 +1,14 @@
 const chess = require('chess')
 
-const { board } = require('@/keyboards')
-const { debug } = require('@/helpers')
+const { board, actions } = require('@/keyboards')
+const { debug, preLog, log, makeUserLog, getFen } = require('@/helpers')
 
 module.exports = () => [
   /^join::([wb])::(\d+)/,
   async (ctx) => {
+    if (ctx.game.joined) {
+      return ctx.answerCbQuery('You are already join the game')
+    }
     const enemyId = Number(ctx.match[2])
     const iAmWhite = ctx.match[1] !== 'w'
 
@@ -48,30 +51,34 @@ module.exports = () => [
     const gameClient = chess.create({ PGN: true })
     const status = gameClient.getStatus()
 
-    ctx.game.lastBoard = board(
-      status.board.squares,
-      ctx.game.config.rotation === 'dynamic' ||
+    ctx.game.lastBoard = board({
+      board: status.board.squares,
+      isWhite: ctx.game.config.rotation === 'dynamic' ||
         ctx.game.config.rotation === 'whites',
-      [{
-        text: 'Settings',
-        callback_data: 'settings',
-      }]
+      actions: actions(`last::${ctx.game.entry.id}`),
+    })
+
+    log(
+      preLog('JOIN', `${game.id} ${makeUserLog(enemy)} ${makeUserLog(user)}`),
+      ctx
     )
 
-    await ctx.editMessageText(
+    await ctx.editMessageCaption(
       iAmWhite
-        ? `Black (top): ${enemy.first_name}
-White (bottom): ${user.first_name}
-White's turn`
-        : `Black (top): ${user.first_name}
-White (bottom): ${enemy.first_name}
-White's turn`,
+        ? `Black  (top): [${enemy.first_name}](tg://user?id=${enemy.id})
+White  (bottom): [${user.first_name}](tg://user?id=${user.id})
+White's turn | [Discussion](https://t.me/chessy_bot_chat)`
+        : `Black  (top): [${user.first_name}](tg://user?id=${user.id})
+White  (bottom): [${enemy.first_name}](tg://user?id=${enemy.id})
+White's turn | [Discussion](https://t.me/chessy_bot_chat)`,
       {
         ...ctx.game.lastBoard,
         parse_mode: 'Markdown',
       }
-    )
+    ).catch(debug)
 
-    return ctx.answerCbQuery('Now play!')
+    ctx.game.joined = true
+
+    return ctx.answerCbQuery('Now play!').catch(debug)
   },
 ]

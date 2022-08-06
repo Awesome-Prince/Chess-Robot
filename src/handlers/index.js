@@ -7,7 +7,9 @@ const mainMenuHandler = require('./mainMenu')
 const inlineBackHandler = require('./inlineBack')
 const inlineJoinHandler = require('./inlineJoin')
 const inlineMoveHandler = require('./inlineMove')
+const inlineLastTurn = require('./inlineLastTurn')
 const inlineQueryHandler = require('./inlineQuery')
+const inlineRejoinHandler = require('./inlineRejoin')
 const inlineSettingsHandler = require('./inlineSettings')
 
 module.exports = {
@@ -16,10 +18,12 @@ module.exports = {
   loadHandler,
   gamesHandler,
   startHandler,
+  inlineLastTurn,
   mainMenuHandler,
   inlineBackHandler,
   inlineJoinHandler,
   inlineMoveHandler,
   inlineQueryHandler,
+  inlineRejoinHandler,
   inlineSettingsHandler,
 }
