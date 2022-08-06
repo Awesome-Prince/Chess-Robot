@@ -30,6 +30,11 @@ module.exports = () => [
     const whites = iAmWhite ? user : enemy
     const blacks = iAmWhite ? enemy : user
 
+    if (enemy === null) {
+      // TODO add function to say user about error
+      return
+    }
+
     await ctx.db('games').insert({
       whites_id: whites.id,
       blacks_id: blacks.id,
