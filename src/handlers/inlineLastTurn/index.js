@@ -6,11 +6,14 @@ const {
   sleep,
   preLog,
   getGame,
+  topMessage,
   isBlackTurn,
   isWhiteTurn,
   isWhiteUser,
   isBlackUser,
   makeUserLog,
+  statusMessage,
+  makeBoardImageUrl,
 } = require('@/helpers')
 const { board, actions } = require('@/keyboards')
 
@@ -40,49 +43,80 @@ module.exports = () => [
       return ctx.answerCbQuery('Don\'t touch')
     }
 
-    const currentGame = chess.create({ PGN: true })
-
-    moves.forEach(({ entry }) => {
-      try {
-        currentGame.move(entry)
-      } catch (error) {
-        debug(error)
-      }
-    })
-
-    const currentStatus = currentGame.getStatus()
-    const currentBoard = board({
-      board: currentStatus.board.squares,
-      isWhite: isWhiteTurn(moves),
-      actions: actions(),
-    })
+    const enemy = await ctx.db('users')
+      .where('id', isWhiteUser(game, ctx)
+        ? Number(game.blacks_id)
+        : Number(game.whites_id))
+      .first()
+      .catch(debug)
 
     log(
       preLog('LAST', `${game.id} ${moves.length} ${makeUserLog(ctx.from)}`),
       ctx,
     )
 
-    const beforeGame = chess.create({ PGN: true })
+    const gameClient = chess.create({ PGN: true })
+    const lastMove = moves.pop()
 
-    moves.pop()
     moves.forEach(({ entry }) => {
       try {
-        beforeGame.move(entry)
+        gameClient.move(entry)
       } catch (error) {
         debug(error)
       }
     })
 
-    const beforeStatus = beforeGame.getStatus()
-    const beforeBoard = board({
-      board: beforeStatus.board.squares,
+    const prevStatus = gameClient.getStatus()
+    const prevBoard = board({
+      board: prevStatus.board.squares,
       isWhite: !isWhiteTurn(moves),
       actions: actions(),
     })
+    const prevFen = gameClient.getFen()
+    const move = prevStatus.notatedMoves[lastMove.entry]
+    const arrow = `${move.src.file}${move.src.rank}${move.dest.file}${move.dest.rank}`
 
-    await ctx.editMessageReplyMarkup(beforeBoard.reply_markup).catch(debug)
-    await sleep(400)
-    await ctx.editMessageReplyMarkup(currentBoard.reply_markup).catch(debug)
+    try {
+      gameClient.move(lastMove.entry)
+    } catch (error) {
+      debug(error)
+    }
+
+    const currentStatus = gameClient.getStatus()
+    const currentBoard = board({
+      board: currentStatus.board.squares,
+      isWhite: !isWhiteTurn(moves),
+      actions: actions(),
+    })
+    const currentFen = gameClient.getFen()
+
+    await ctx.editMessageMedia(
+      {
+        type: 'photo',
+        media: makeBoardImageUrl(prevFen, { rotate: Number(isWhiteTurn(moves)), 'arrows[]': arrow }),
+        caption: topMessage(isWhiteTurn(moves), enemy, ctx.from) + statusMessage(currentStatus),
+      },
+      {
+        ...prevBoard,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      },
+    ).catch(debug)
+
+    await sleep(1000)
+
+    await ctx.editMessageMedia(
+      {
+        type: 'photo',
+        media: makeBoardImageUrl(currentFen, { rotate: Number(isWhiteTurn(moves)) }),
+        caption: topMessage(isWhiteTurn(moves), enemy, ctx.from) + statusMessage(currentStatus),
+      },
+      {
+        ...currentBoard,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      },
+    ).catch(debug)
 
     ctx.game.busy = false
     return ctx.answerCbQuery()

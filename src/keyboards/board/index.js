@@ -5,7 +5,7 @@ const { emodji, letters } = require('@/helpers')
 const { Markup } = Telegraf
 
 const NIL = 0
-let pieces = (NIL !== 0) ? letters : emodji
+const pieces = (NIL !== 0) ? letters : emodji
 
 /**
  * Board generator function.
@@ -15,8 +15,7 @@ let pieces = (NIL !== 0) ? letters : emodji
  * @param {Array[]} actions The additional buttons under the board.
  * @return {Extra}
  */
-module.exports = ({ board, isWhite, actions, callbackOverride }) => {
-  const horizontal = 'hgfedcba'.split('')
+
   const vertical = Array.from({ length: 8 }, (item, idx) => idx + 1).reverse()
 
   /**

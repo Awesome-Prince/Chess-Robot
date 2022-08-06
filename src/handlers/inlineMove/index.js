@@ -9,12 +9,12 @@ const {
   isWhiteUser,
   isBlackUser,
   makeUserLog,
+  makeBoardImageUrl,
 } = require('@/helpers')
 const { board, actions, promotion } = require('@/keyboards')
 
 // eslint-disable-next-line id-length
 const sortFunction = (a, b) => JSON.stringify(a) > JSON.stringify(b) ? 1 : -1
-
 const mapFunction = ({ dest }) => dest
 
 const statusMessage = ({ isCheck, isCheckmate, isRepetition }) => `
@@ -108,18 +108,6 @@ module.exports = () => [
         .filter((key) => status.notatedMoves[key].src === pressed)
         .map((key) => ({ ...status.notatedMoves[key], key }))
 
-      if (
-        ((!ctx.game.allowedMoves || ctx.game.allowedMoves.length === 0) &&
-          allowedMoves.length === 0) ||
-        (ctx.game.allowedMoves && ctx.game.allowedMoves.length === allowedMoves.length &&
-          JSON.stringify(ctx.game.allowedMoves.map(mapFunction).sort(sortFunction)) === JSON.stringify(allowedMoves.map(mapFunction).sort(sortFunction)))
-      ) {
-        ctx.game.allowedMoves = allowedMoves
-        ctx.game.selected = pressed
-
-        ctx.game.busy = false
-        return ctx.answerCbQuery(`${pressed.piece.type} ${pressed.file}${pressed.rank}`)
-      }
 
       ctx.game.lastBoard = board({
         board: status.board.squares.map((square) => {
@@ -129,17 +117,26 @@ module.exports = () => [
 
           return move ? { ...square, move } : square
         }),
-        isWhite: ctx.game.config.rotation === 'dynamic'
-          ? isWhiteTurn(gameMoves)
-          : ctx.game.config.rotation === 'whites',
+        isWhite: isWhiteTurn(gameMoves),
         actions: actions(),
       })
 
-      await ctx.editMessageReplyMarkup(ctx.game.lastBoard.reply_markup)
+      await ctx.editMessageMedia(
+        {
+          type: 'photo',
+          media: makeBoardImageUrl(gameClient.getFen(), { rotate: Number(!isWhiteTurn(gameMoves)), marks }),
+          caption: topMessage(!isWhiteTurn(gameMoves), enemy, ctx.from) + statusMessage(status),
+        },
+        {
+          ...ctx.game.lastBoard,
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true,
+        },
+      )
         .catch((error) => {
           debug(error)
-          debug(ctx.update)
-          debug(ctx.game)
+          // debug(ctx.update)
+          // debug(ctx.game)
         })
 
       ctx.game.allowedMoves = allowedMoves
@@ -175,15 +172,10 @@ module.exports = () => [
           .catch(debug)
 
         ctx.game.busy = false
-        return ctx.answerCbQuery()
+        return ctx.answerCbQuery('Please choose the piece to promote the pawn!')
       }
 
       let makeMove
-      // let topMessageText = topMessage(
-      //   !isWhiteTurn(gameMoves),
-      //   enemy,
-      //   ctx.from,
-      // )
 
       if (ctx.game.promotion) {
         makeMove = ctx.game.allowedMoves.find(({ key, dest: { file, rank } }) => (
@@ -216,40 +208,41 @@ module.exports = () => [
 
       status = gameClient.getStatus()
 
-      ctx.game.lastBoard = board({
-        board: status.board.squares,
-        isWhite: ctx.game.config.rotation === 'dynamic'
-          ? (makeMove ? !isWhiteTurn(gameMoves) : isWhiteTurn(gameMoves))
-          : ctx.game.config.rotation === 'whites',
-        actions: actions(),
-      })
-
       if (makeMove) {
-        await ctx.editMessageText(
-          topMessage(isWhiteTurn(gameMoves), ctx.from, enemy) + statusMessage(status),
+        await ctx.editMessageMedia(
           {
-            ...ctx.game.lastBoard,
+            type: 'photo',
+            media: makeBoardImageUrl(gameClient.getFen(), { rotate: Number(isWhiteTurn(gameMoves)) }),
+            caption: topMessage(isWhiteTurn(gameMoves), ctx.from, enemy) + statusMessage(status),
+          },
+          {
+            ...board({
+              board: status.board.squares,
+              isWhite: !isWhiteTurn(gameMoves),
+              actions: actions(),
+            }),
             parse_mode: 'Markdown',
             disable_web_page_preview: true,
           },
         ).catch(debug)
 
-        ctx.game.allowedMoves = null
-        ctx.game.selected = null
 
-        ctx.game.busy = false
+          },
+          {
+            ...board({
+              board: status.board.squares,
+              isWhite: isWhiteTurn(gameMoves),
+              actions: actions(),
+            }),
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+          },
+        ).catch(debug)
+
         return ctx.answerCbQuery(makeMove.key)
       }
 
-      if (ctx.game.allowedMoves.length > 0) {
-        await ctx.editMessageReplyMarkup(ctx.game.lastBoard.reply_markup)
-          .catch(debug)
-      }
 
-      ctx.game.allowedMoves = null
-      ctx.game.selected = null
-
-      ctx.game.busy = false
       return ctx.answerCbQuery()
     }
   },
