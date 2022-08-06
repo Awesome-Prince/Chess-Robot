@@ -1,6 +1,7 @@
 require('dotenv').config()
 require('module-alias/register')
 
+const Sequelize = require('sequelize')
 const knex = require('knex')
 
 
@@ -15,13 +16,14 @@ const {
   inlineSettingsHandler,
 } = require('@/handlers')
 
-const knexConfig = require('@/../knexfile')
 
 const { BOT_NAME, BOT_TOKEN } = process.env
 
 const bot = new Telegraf(BOT_TOKEN, { username: BOT_NAME })
 const stage = new Stage([gameScene])
 
+bot.context.sequelize = new Sequelize(DB_STRING)
+bot.context.sequelize.sync()
 bot.context.db = knex(knexConfig)
 
 bot.use(stage.middleware())
