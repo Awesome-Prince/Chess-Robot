@@ -58,7 +58,6 @@ Next migrate the DB:
 
 ```bash
 npm run knex migrate:latest
-```
 
 Then run the dev mode:
 
